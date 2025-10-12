@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schnapsen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card { width: 100px; height: 150px; border-radius: 8px; }
+        .card:hover { transform: scale(1.05); transition: transform 0.2s; }
+        .dud-card { border: 2px solid gold; }
+        .selected-card { border: 2px solid blue; }
+        .game-area { background: linear-gradient(to bottom, #1a202c, #2d3748); }
+        .trick-card { width: 60px; height: 90px; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center min-h-screen game-area">
+    <div class="container mx-auto p-4">
+        <h1 class="text-4xl font-bold mb-4 text-center">Schnapsen</h1>
+        <div class="flex justify-between mb-4">
+            <div>
+                <h2 class="text-2xl">Spieler Punkte: <span id="playerScore">0</span></h2>
+            </div>
+            <div>
+                <h2 class="text-2xl">Bot Punkte: <span id="botScore">0</span></h2>
+            </div>
+        </div>
+        <div class="flex justify-center mb-4">
+            <div class="text-center">
+                <h3 class="text-xl">Atout</h3>
+                <img id="dudCard" class="card dud-card" src="" alt="Dud-Karte">
+            </div>
+        </div>
+        <div class="flex justify-center mb-4">
+            <div class="text-center">
+                <h3 class="text-xl">Tisch</h3>
+                <div id="table" class="flex space-x-4">
+                    <img id="playerTableCard" class="card" src="" alt="Spieler-Karte" style="display: none;">
+                    <img id="botTableCard" class="card" src="" alt="Bot-Karte" style="display: none;">
+                </div>
+            </div>
+        </div>
+        <div class="flex justify-center mb-4">
+            <button id="swapDudButton" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2" style="display: none;">Dud tauschen</button>
+            <button id="resolveTrickButton" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" style="display: none;">Stich auswerten</button>
+        </div>
+        <div class="flex">
+            <div class="w-1/4 pr-4">
+                <h3 class="text-xl">Deine Stiche</h3>
+                <div id="playerTricks" class="flex flex-wrap gap-2 mt-2"></div>
+            </div>
+            <div class="w-3/4">
+                <h3 class="text-xl text-center">Deine Karten</h3>
+                <div id="playerHand" class="flex justify-center space-x-4 mt-2"></div>
+            </div>
+        </div>
+        <div id="message" class="text-center mt-4 text-lg"></div>
+    </div>
+
+    <script>
+        const cards = [
+            { suit: 'Kreuz', rank: '10', value: 10, img: 'https://i.imgur.com/t9IiP7Y.png' },
+            { suit: 'Kreuz', rank: 'Bub', value: 2, img: 'https://i.imgur.com/jXAdoRZ.png' },
+            { suit: 'Kreuz', rank: 'Dame', value: 3, img: 'https://i.imgur.com/FKp0Sir.png' },
+            { suit: 'Kreuz', rank: 'König', value: 4, img: 'https://i.imgur.com/PVxPJWU.png' },
+            { suit: 'Kreuz', rank: 'Ass', value: 11, img: 'https://i.imgur.com/MqCHapa.png' },
+            { suit: 'Pik', rank: '10', value: 10, img: 'https://i.imgur.com/ydLemUf.png' },
+            { suit: 'Pik', rank: 'Bub', value: 2, img: 'https://i.imgur.com/ehsJ1JV.png' },
+            { suit: 'Pik', rank: 'Dame', value: 3, img: 'https://i.imgur.com/RtdfHmu.png' },
+            { suit: 'Pik', rank: 'König', value: 4, img: 'https://i.imgur.com/Nk2uAub.png' },
+            { suit: 'Pik', rank: 'Ass', value: 11, img: 'https://i.imgur.com/9ZV6QOu.png' },
+            { suit: 'Karo', rank: '10', value: 10, img: 'https://i.imgur.com/hIdhZr3.png' },
+            { suit: 'Karo', rank: 'Bub', value: 2, img: 'https://i.imgur.com/xZtxhs7.png' },
+            { suit: 'Karo', rank: 'Dame', value: 3, img: 'https://i.imgur.com/NYpnC6N.png' },
+            { suit: 'Karo', rank: 'König', value: 4, img: 'https://i.imgur.com/QJTX9Jc.png' },
+            { suit: 'Karo', rank: 'Ass', value: 11, img: 'https://i.imgur.com/jezRLyl.png' },
+            { suit: 'Herz', rank: '10', value: 10, img: 'https://i.imgur.com/Lw6QXjI.png' },
+            { suit: 'Herz', rank: 'Bub', value: 2, img: 'https://i.imgur.com/fVLjNY3.png' },
+            { suit: 'Herz', rank: 'Dame', value: 3, img: 'https://i.imgur.com/uP8LB9C.png' },
+            { suit: 'Herz', rank: 'König', value: 4, img: 'https://i.imgur.com/Fwd2Ucg.png' },
+            { suit: 'Herz', rank: 'Ass', value: 11, img: 'https://i.imgur.com/epgeJfN.png' }
+        ];
+
+        const rankOrder = { 'Bub': 1, 'Dame': 2, 'König': 3, '10': 4, 'Ass': 5 };
+        let playerHand = [], botHand = [], deck = [], dudCard = null;
+        let playerScore = 0, botScore = 0, playerTurn = true;
+        let playerTableCard = null, botTableCard = null;
+        let playerTricks = [];
+        let lead = null; // 'player' or 'bot'
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function dealCards() {
+            deck = [...cards];
+            shuffle(deck);
+            playerHand = deck.splice(0, 5);
+            botHand = deck.splice(0, 5);
+            dudCard = deck.pop();
+            playerTricks = [];
+            lead = playerTurn ? 'player' : 'bot';
+            updateUI();
+            if (!playerTurn) {
+                setTimeout(botPlay, 1000);
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('playerScore').textContent = playerScore;
+            document.getElementById('botScore').textContent = botScore;
+            document.getElementById('dudCard').src = dudCard ? dudCard.img : '';
+            document.getElementById('playerHand').innerHTML = '';
+            playerHand.forEach((card, index) => {
+                const img = document.createElement('img');
+                img.src = card.img;
+                img.className = 'card';
+                img.dataset.index = index;
+                if ((playerTurn && !playerTableCard && !botTableCard) || (!playerTurn && botTableCard && !playerTableCard)) {
+                    img.onclick = () => playCard(index);
+                }
+                document.getElementById('playerHand').appendChild(img);
+            });
+            document.getElementById('swapDudButton').style.display = (playerTurn && !playerTableCard && !botTableCard && playerHand.some(card => card.rank === 'Bub' && card.suit === dudCard.suit)) ? 'block' : 'none';
+            document.getElementById('playerTableCard').src = playerTableCard ? playerTableCard.img : '';
+            document.getElementById('playerTableCard').style.display = playerTableCard ? 'block' : 'none';
+            document.getElementById('botTableCard').src = botTableCard ? botTableCard.img : '';
+            document.getElementById('botTableCard').style.display = botTableCard ? 'block' : 'none';
+            document.getElementById('resolveTrickButton').style.display = playerTableCard && botTableCard ? 'block' : 'none';
+            document.getElementById('playerTricks').innerHTML = '';
+            playerTricks.forEach(card => {
+                const img = document.createElement('img');
+                img.src = card.img;
+                img.className = 'trick-card';
+                document.getElementById('playerTricks').appendChild(img);
+            });
+            document.getElementById('message').textContent = playerTurn ? 'Du bist dran!' : botTableCard ? 'Du bist dran! (Antwort)' : 'Bot ist dran...';
+        }
+
+        function playCard(index) {
+            if (!playerHand[index] || playerTableCard) return;
+            if (!(playerTurn && !botTableCard) && !(!playerTurn && botTableCard)) return;
+            playerTableCard = playerHand.splice(index, 1)[0];
+            checkMarriage(playerTableCard, true);
+            updateUI();
+            if (botTableCard) {
+                // Do nothing, wait for resolve button
+            } else {
+                playerTurn = false;
+                setTimeout(botPlay, 1000);
+            }
+        }
+
+        function botPlay() {
+            if (playerTurn || botTableCard) return;
+            let leadCard = playerTableCard; // If responding
+            let isLead = !leadCard;
+            if (isLead) {
+                lead = 'bot';
+            }
+            let cardToPlay;
+            if (leadCard) {
+                // Responding
+                const suit = leadCard.suit;
+                const hasSuit = botHand.some(c => c.suit === suit);
+                const hasTrump = botHand.some(c => c.suit === dudCard.suit);
+                let validCards = [];
+                if (hasSuit) {
+                    validCards = botHand.filter(c => c.suit === suit && rankOrder[c.rank] > rankOrder[leadCard.rank]);
+                }
+                if (validCards.length === 0 && hasTrump) {
+                    validCards = botHand.filter(c => c.suit === dudCard.suit);
+                }
+                if (validCards.length === 0) {
+                    validCards = botHand;
+                }
+                cardToPlay = validCards[Math.floor(Math.random() * validCards.length)];
+            } else {
+                // Leading
+                cardToPlay = botHand[Math.floor(Math.random() * botHand.length)];
+            }
+            botTableCard = botHand.splice(botHand.indexOf(cardToPlay), 1)[0];
+            checkMarriage(botTableCard, false);
+            updateUI();
+        }
+
+        function checkMarriage(card, isPlayer) {
+            if (isPlayer && lead !== 'player') return;
+            if (!isPlayer && lead !== 'bot') return;
+            const otherRank = card.rank === 'Dame' ? 'König' : card.rank === 'König' ? 'Dame' : null;
+            const hand = isPlayer ? playerHand : botHand;
+            const scoreVar = isPlayer ? 'playerScore' : 'botScore';
+            if (otherRank && hand.some(c => c.rank === otherRank && c.suit === card.suit)) {
+                const points = card.suit === dudCard.suit ? 40 : 20;
+                if (isPlayer) playerScore += points; else botScore += points;
+                document.getElementById('message').textContent = `${isPlayer ? 'Du' : 'Bot'} erhält Dame-König! (+${points} Punkte)`;
+                setTimeout(updateUI, 1000);
+            }
+        }
+
+        function resolveTrick() {
+            if (!playerTableCard || !botTableCard) return;
+            const firstCard = lead === 'player' ? playerTableCard : botTableCard;
+            const secondCard = lead === 'player' ? botTableCard : playerTableCard;
+            let winner = null;
+            if (secondCard.suit === dudCard.suit && firstCard.suit !== dudCard.suit) {
+                winner = lead === 'player' ? 'bot' : 'player';
+            } else if (firstCard.suit === dudCard.suit && secondCard.suit !== dudCard.suit) {
+                winner = lead;
+            } else if (firstCard.suit === secondCard.suit) {
+                winner = rankOrder[firstCard.rank] > rankOrder[secondCard.rank] ? lead : (lead === 'player' ? 'bot' : 'player');
+            } else {
+                winner = lead;
+            }
+            const points = playerTableCard.value + botTableCard.value;
+            if (winner === 'player') {
+                playerScore += points;
+                playerTricks.push(playerTableCard, botTableCard);
+                document.getElementById('message').textContent = `Du gewinnst den Stich! (+${points} Punkte)`;
+                playerTurn = true;
+            } else {
+                botScore += points;
+                document.getElementById('message').textContent = `Bot gewinnt den Stich! (+${points} Punkte)`;
+                playerTurn = false;
+            }
+            if (deck.length > 0) {
+                if (playerHand.length < 5) playerHand.push(deck.pop());
+                if (botHand.length < 5) botHand.push(deck.pop());
+            }
+            playerTableCard = null;
+            botTableCard = null;
+            lead = playerTurn ? 'player' : 'bot';
+            checkGameEnd();
+            updateUI();
+            if (!playerTurn) {
+                setTimeout(botPlay, 1000);
+            }
+        }
+
+        function swapDud() {
+            if (!playerTurn || playerTableCard || botTableCard) return;
+            const bubIndex = playerHand.findIndex(card => card.rank === 'Bub' && card.suit === dudCard.suit);
+            if (bubIndex !== -1) {
+                const temp = dudCard;
+                dudCard = playerHand[bubIndex];
+                playerHand[bubIndex] = temp;
+                document.getElementById('message').textContent = 'Dud getauscht!';
+                updateUI();
+            }
+        }
+
+        function checkGameEnd() {
+            if (playerScore >= 66) {
+                document.getElementById('message').textContent = 'Glückwunsch! Du hast gewonnen!';
+                disableGame();
+            } else if (botScore >= 66) {
+                document.getElementById('message').textContent = 'Bot hat gewonnen!';
+                disableGame();
+            }
+        }
+
+        function disableGame() {
+            document.getElementById('playerHand').innerHTML = '';
+            document.getElementById('swapDudButton').style.display = 'none';
+            document.getElementById('resolveTrickButton').style.display = 'none';
+        }
+
+        document.getElementById('swapDudButton').onclick = swapDud;
+        document.getElementById('resolveTrickButton').onclick = resolveTrick;
+        dealCards();
+    </script>
+</body>
+</html>
